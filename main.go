@@ -23,6 +23,7 @@ func main() {
 
 	// AutoMigrate will create tables for your models if they don't exist
 	db.AutoMigrate(&User{})
+	db.AutoMigrate(&Banner{})
 
 	// Initialize Echo
 	e := echo.New()
@@ -34,7 +35,8 @@ func main() {
 	e.GET("/user/:id", getUserByIDHandler(db))
 	e.GET("/user/:email", getUserByEmailHandler(db))
 	e.DELETE("/user/:id", deleteUserByIDHandler(db))
-
+	e.POST("/addBanner", addBannerHandler(db))
+	e.GET("/banner", getBannerHandler(db))
 	// Start the server
 	e.Start(":8080")
 }
@@ -50,6 +52,30 @@ type User struct {
 	SMS         string
 	Expired     string
 	PhoneNumber string
+}
+
+type Banner struct {
+	ID   uint `gorm:"primaryKey"`
+	Name string
+	URL  string
+}
+
+func addBannerHandler(db *gorm.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		banner := new(Banner)
+		if err := c.Bind(banner); err != nil {
+			return c.JSON(http.StatusBadRequest, "Invalid request")
+		}
+
+		// Create the new user
+		newBanner := Banner{
+			Name: banner.Name,
+			URL:  banner.URL,
+		}
+		db.Create(&newBanner)
+
+		return c.JSON(http.StatusCreated, "Banner registered successfully")
+	}
 }
 
 func registerHandler(db *gorm.DB) echo.HandlerFunc {
@@ -144,6 +170,18 @@ func getAllUsersHandler(db *gorm.DB) echo.HandlerFunc {
 		}
 
 		return c.JSON(http.StatusOK, users)
+	}
+}
+
+func getBannerHandler(db *gorm.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var banners []Banner
+		result := db.Find(&banners)
+		if result.Error != nil {
+			return c.JSON(http.StatusInternalServerError, "Error fetching banners")
+		}
+
+		return c.JSON(http.StatusOK, banners)
 	}
 }
 
