@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	//"github.com/rizqiramadhannn/mytsel-server/config"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/crypto/bcrypt"
@@ -28,15 +31,19 @@ func main() {
 	// Initialize Echo
 	e := echo.New()
 
+	// Apply middleware to group
+	protectedGroup := e.Group("")
+	protectedGroup.Use(authenticate)
+
 	// Set up routes
 	e.POST("/register", registerHandler(db))
 	e.POST("/login", loginHandler(db))
-	e.GET("/users", getAllUsersHandler(db))
-	e.GET("/user/:id", getUserByIDHandler(db))
-	e.GET("/user/:email", getUserByEmailHandler(db))
-	e.DELETE("/user/:id", deleteUserByIDHandler(db))
-	e.POST("/addBanner", addBannerHandler(db))
-	e.GET("/banner", getBannerHandler(db))
+	protectedGroup.GET("/users", getAllUsersHandler(db))
+	protectedGroup.GET("/user/:id", getUserByIDHandler(db))
+	protectedGroup.GET("/user/:email", getUserByEmailHandler(db))
+	protectedGroup.DELETE("/user/:id", deleteUserByIDHandler(db))
+	protectedGroup.POST("/addBanner", addBannerHandler(db))
+	protectedGroup.GET("/banner", getBannerHandler(db))
 	// Start the server
 	e.Start(":8080")
 }
@@ -58,6 +65,38 @@ type Banner struct {
 	ID   uint `gorm:"primaryKey"`
 	Name string
 	URL  string
+}
+
+func authenticate(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		token := c.Request().Header.Get("Authorization")
+		if token == "" {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"msg": "Missing token"})
+		}
+
+		// Extract the token by removing the "Bearer " prefix
+		token = strings.TrimPrefix(token, "Bearer ")
+
+		// Parse the token
+		claims := jwt.MapClaims{}
+		parsedToken, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+			// Replace with your actual secret key used for signing the tokens
+			return []byte("1234"), nil
+		})
+		fmt.Println("Token String:", token)
+		fmt.Println("Parsed Token:", parsedToken.Valid)
+		if err != nil {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"msg": "Invalid token"})
+		}
+
+		// Check expiration
+		if !claims.VerifyExpiresAt(time.Now().Unix(), true) {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"msg": "Token has expired"})
+		}
+
+		// If the token is valid, call the next handler
+		return next(c)
+	}
 }
 
 func addBannerHandler(db *gorm.DB) echo.HandlerFunc {
@@ -110,8 +149,11 @@ func registerHandler(db *gorm.DB) echo.HandlerFunc {
 			Expired:     time.Now().AddDate(0, 1, 0).String(),
 			PhoneNumber: "085200000000",
 		}
-		db.Create(&newUser)
-
+		err = db.Create(&newUser).Error
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "Email error")
+		}
+		//validasi email & len email
 		return c.JSON(http.StatusCreated, "User registered successfully")
 	}
 }
@@ -218,6 +260,9 @@ func deleteUserByIDHandler(db *gorm.DB) echo.HandlerFunc {
 		userID := c.Param("id")
 
 		result := db.Delete(&User{}, userID)
+		if result.RowsAffected == 0 {
+			return c.JSON(http.StatusNotFound, "User not found")
+		}
 		if result.Error != nil {
 			return c.JSON(http.StatusInternalServerError, "Error deleting user")
 		}
@@ -254,6 +299,20 @@ func generateAuthToken(userId uint) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Token validation
+	claimed := jwt.MapClaims{}
+	parsedToken, err := jwt.ParseWithClaims(tokenString, claimed, func(token *jwt.Token) (interface{}, error) {
+		// Replace with your actual secret key used for signing the tokens
+		return []byte("1234"), nil
+	})
+
+	if err != nil {
+		fmt.Println("Token validation error:", err)
+	}
+
+	fmt.Println("Parsed Token:", parsedToken.Valid)
+	fmt.Println("Token String:", tokenString)
 
 	return tokenString, nil
 }
