@@ -101,6 +101,10 @@ func GetAllUsersHandler(db *gorm.DB) echo.HandlerFunc {
 		if result.Error != nil {
 			return c.JSON(http.StatusInternalServerError, "Error fetching users")
 		}
+
+		for i := 0; i < len(users); i++ {
+			users[i].Password = ""
+		}
 		return c.JSON(http.StatusOK, users)
 	}
 }
@@ -114,6 +118,9 @@ func GetUserByIDHandler(db *gorm.DB) echo.HandlerFunc {
 		if result.Error != nil {
 			return c.JSON(http.StatusNotFound, "User not found")
 		}
+
+		user.Password = ""
+
 		return c.JSON(http.StatusOK, user)
 	}
 }

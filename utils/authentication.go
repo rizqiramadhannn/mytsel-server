@@ -34,8 +34,14 @@ func Authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 		if err != nil {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"msg": "Invalid token"})
 		}
-		// TODO:
-		c.Set("user_id", 1)
+		// Extract the user_id from claims
+		userID, ok := claims["user_id"].(float64)
+		if !ok {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"msg": "user_id not found in token"})
+		}
+
+		// Set the user_id in the context
+		c.Set("user_id", int(userID))
 		// Check expiration
 		if !claims.VerifyExpiresAt(time.Now().Unix(), true) {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"msg": "Token has expired"})
